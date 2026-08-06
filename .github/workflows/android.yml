@@ -20,9 +20,9 @@ jobs:
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: wrapper
+          gradle-version: '8.9'
       - name: Test, lint and build
-        run: chmod +x gradlew && ./gradlew testDebugUnitTest lintDebug assembleDebug --stacktrace
+        run: gradle testDebugUnitTest lintDebug assembleDebug --stacktrace
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
