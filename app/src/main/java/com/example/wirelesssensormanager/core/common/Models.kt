@@ -2,7 +2,7 @@ package com.example.wirelesssensormanager.core.common
 
 import java.util.UUID
 
-enum class DeviceType { RECEIVER, PRESSURE_SENSOR, TILT_SENSOR, SENSOR, UNKNOWN }
+enum class DeviceType { RECEIVER, PRESSURE_SENSOR, TILT_SENSOR, SENSOR, OTA, UNKNOWN }
 
 enum class BleConnectionState {
     BLUETOOTH_UNAVAILABLE, PERMISSION_REQUIRED, IDLE, SCANNING, DEVICE_FOUND,
@@ -17,6 +17,7 @@ data class DiscoveredDevice(
     val type: DeviceType,
     val rssi: Int,
     val serviceUuids: Set<UUID>,
+    val advertisedAddresses: Set<String> = emptySet(),
     val lastSeenMillis: Long = System.currentTimeMillis()
 )
 

@@ -5,6 +5,26 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class BleProtocolTest {
+    @Test fun `sensor v2 sample decodes signed values and flags`() {
+        val raw = byteArrayOf(1,0,0,0,25, 0x9c.toByte(),0xff.toByte(), 20,0, 10,0, 0xf6.toByte(),0xff.toByte(), 0xff.toByte(), 7,0, (37 shl 2 or 2).toByte())
+        val sample = SensorProtocol.parseSample(raw)
+        assertEquals(-100, sample.xAngle)
+        assertEquals(20, sample.yAngle)
+        assertTrue(sample.readOk == true)
+        assertEquals(3.7f, sample.voltageVolts ?: 0f, 0.01f)
+    }
+
+    @Test fun `qr identity parser extracts compact and separated mac`() {
+        assertEquals("AA:BB:CC:DD:EE:FF", DeviceIdentityParser.extractMac("sensor=AABBCCDDEEFF"))
+        assertEquals("01:02:03:04:05:06", DeviceIdentityParser.extractMac("01-02-03-04-05-06"))
+    }
+
+    @Test fun `sensor v1 voltage uses legacy flag layout`() {
+        val raw = ByteArray(17).also { it[16] = (37 shl 1).toByte() }
+        val sample = SensorProtocol.parseSample(raw, protocolVersion = 1)
+        assertEquals(3.7f, sample.voltageVolts ?: 0f, 0.01f)
+        assertEquals(null, sample.readOk)
+    }
     @Test fun `receiver commands match firmware byte layout`() {
         assertArrayEquals(byteArrayOf(1, 1, 0x34, 0x12), ReceiverProtocol.setId(0x1234))
         assertArrayEquals(byteArrayOf(1, 2, 3, 2, 9, 1, 2, 3, 4, 5, 6), ReceiverProtocol.setSlot(3, SensorIdentity(2, 9, byteArrayOf(1,2,3,4,5,6))))

@@ -3,6 +3,8 @@ package com.example.wirelesssensormanager
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.wirelesssensormanager.core.database.SettingsStore
+import com.example.wirelesssensormanager.core.ble.FakeBleTransport
+import com.example.wirelesssensormanager.core.ota.OtaService
 import com.example.wirelesssensormanager.feature.binding.BindingCoordinator
 import com.example.wirelesssensormanager.feature.binding.StubRepository
 import kotlinx.coroutines.*
@@ -23,7 +25,7 @@ class MainViewModelTest {
 
     @Test fun `scan result flows into view model state`() = runTest(dispatcher) {
         val repo = StubRepository()
-        val vm = MainViewModel(repo, BindingCoordinator(repo), SettingsStore(ApplicationProvider.getApplicationContext<Context>()))
+        val vm = MainViewModel(repo, BindingCoordinator(repo), SettingsStore(ApplicationProvider.getApplicationContext<Context>()), OtaService(FakeBleTransport()))
         val collection = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect() }
         vm.scan()
         advanceUntilIdle()

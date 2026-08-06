@@ -57,3 +57,6 @@ Android 12 及以上需授予“附近设备”的扫描和连接权限；Androi
 - `docs/ARCHITECTURE.md` / `DATABASE.md`：架构与数据库
 - `docs/OPEN_QUESTIONS.md` / `KNOWN_ISSUES.md`：未确认项和限制
 - `docs/TEST_REPORT.md` / `DEVICE_TEST_CHECKLIST.md`：自动化范围与真机清单
+原生 Android 无线传感器配置与绑定工具。功能包括接收器/压力/倾角扫描识别、实时数据、8 槽绑定编辑、参数配置、客户/维护模式、井下高对比模式、二维码、诊断日志，以及 Silicon Labs GBL OTA 完整流程。核心 BLE 和配置功能可完全离线使用，URL 固件下载属于可选能力。
+
+维护模式沿用旧工具的现场密码规则，但新工程只保存密码 SHA-256 摘要，不在源码和日志中保存明文。

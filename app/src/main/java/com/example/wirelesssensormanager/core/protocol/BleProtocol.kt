@@ -31,8 +31,9 @@ object BleUuids {
 
 object OtaProtocol {
     const val BEGIN = 0xEE
-    const val FINISH = 0x00
-    const val CHUNK_SIZE = 128
+    const val ENTER_DFU = 0x00
+    const val FINISH = 0x03
+    const val CHUNK_SIZE = 20
 }
 
 object ReceiverProtocol {
@@ -89,16 +90,16 @@ object ReceiverProtocol {
 }
 
 object SensorProtocol {
-    fun parseSample(data: ByteArray, offset: Int = 0, slot: Int? = null): SensorSample {
+    fun parseSample(data: ByteArray, offset: Int = 0, slot: Int? = null, protocolVersion: Int? = null): SensorSample {
         require(data.size - offset >= 17)
         fun u8(i: Int) = data[offset + i].toInt() and 0xff
         fun i16(i: Int) = (u8(i) or (u8(i + 1) shl 8)).toShort().toInt()
         fun i32(i: Int) = u8(i) or (u8(i + 1) shl 8) or (u8(i + 2) shl 16) or (u8(i + 3) shl 24)
         val flags = u8(16)
-        val voltage = ((flags ushr 2) and 0x3f) / 10f
+        val voltage = (if (protocolVersion == 1) ((flags ushr 1) and 0x7f) else ((flags ushr 2) and 0x3f)) / 10f
         return SensorSample(slot, (u8(0) or (u8(1) shl 8) or (u8(2) shl 16) or (u8(3) shl 24)).toLong() and 0xffffffffL,
             u8(4), i32(5), (u8(9).toLong() or (u8(10).toLong() shl 8) or (u8(11).toLong() shl 16) or (u8(12).toLong() shl 24)) and 0xffffffffL,
-            i16(5), i16(7), i16(9), i16(11), (u8(13) shl 8) or u8(4), u8(14) or (u8(15) shl 8), voltage, (flags and 2) != 0)
+            i16(5), i16(7), i16(9), i16(11), (u8(13) shl 8) or u8(4), u8(14) or (u8(15) shl 8), voltage, if (protocolVersion == 1) null else (flags and 2) != 0)
     }
     fun encodeOffset(value: Int): ByteArray = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(value).array()
     fun decodeOffset(data: ByteArray): Int { require(data.size == 4); return ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).int }

@@ -10,6 +10,24 @@ sealed interface BindingResult {
 }
 
 class BindingCoordinator @Inject constructor(private val repository: DeviceRepository) {
+    suspend fun synchronize(desired: List<SensorIdentity?>): List<BindingSlot> {
+        require(desired.size == 8) { "绑定编辑表必须包含 8 个槽位" }
+        val duplicate = desired.filterNotNull().groupBy { it.displayMac }.values.firstOrNull { it.size > 1 }
+        require(duplicate == null) { "绑定编辑表中存在重复传感器 ${duplicate?.firstOrNull()?.displayMac}" }
+        val before = repository.readBindingTable()
+        desired.forEachIndexed { index, target ->
+            val current = before[index]
+            val same = target != null && current.sensorType == target.type && current.sensorId == target.sensorId && current.mac.contentEquals(target.mac)
+            if (!same && current.occupied) check(repository.clearBinding(index).status == 0) { "清除槽位 ${index + 1} 失败" }
+            if (!same && target != null) check(repository.setBinding(index, target).status == 0) { "写入槽位 ${index + 1} 失败" }
+        }
+        val actual = repository.readBindingTable()
+        desired.forEachIndexed { index, target ->
+            val value = actual[index]
+            check(if (target == null) !value.occupied else value.sensorType == target.type && value.sensorId == target.sensorId && value.mac.contentEquals(target.mac)) { "槽位 ${index + 1} 回读不一致" }
+        }
+        return actual
+    }
     suspend fun bind(targetSlot: Int, identity: SensorIdentity): BindingResult {
         if (targetSlot !in 0..7) return BindingResult.Rejected("槽位必须为 1 至 8")
         val before = repository.readBindingTable()

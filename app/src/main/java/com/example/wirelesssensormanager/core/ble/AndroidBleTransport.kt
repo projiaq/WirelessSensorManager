@@ -56,6 +56,7 @@ class AndroidBleTransport @Inject constructor(
         val uuids = record?.serviceUuids.orEmpty().map(ParcelUuid::getUuid).toSet()
         val name = record?.deviceName ?: runCatching { result.device.name }.getOrNull()
         val type = when {
+            BleUuids.OTA_SERVICE in uuids || name.equals("OTA", true) || name?.contains("DFU", true) == true || name?.contains("APPL", true) == true -> DeviceType.OTA
             BleUuids.RECEIVER_SERVICE in uuids -> DeviceType.RECEIVER
             BleUuids.SENSOR_DATA_SERVICE in uuids -> DeviceType.SENSOR
             name?.startsWith("AIOT_") == true -> DeviceType.RECEIVER
@@ -64,7 +65,7 @@ class AndroidBleTransport @Inject constructor(
             else -> DeviceType.UNKNOWN
         }
         if (type == DeviceType.UNKNOWN) return
-        devices[result.device.address] = DiscoveredDevice(result.device.address, name, type, result.rssi, uuids)
+        devices[result.device.address] = DiscoveredDevice(result.device.address, name, type, result.rssi, uuids, parseAdvertisedAddresses(record?.bytes))
         _devices.value = devices.values.sortedByDescending { it.rssi }
         _state.value = BleConnectionState.DEVICE_FOUND
     }
@@ -200,8 +201,11 @@ class AndroidBleTransport @Inject constructor(
         val receiver = g.getService(BleUuids.RECEIVER_SERVICE)
         val sensorData = g.getService(BleUuids.SENSOR_DATA_SERVICE)
         val sensorConfig = g.getService(BleUuids.SENSOR_CONFIG_SERVICE)
-        return if (expectedType == DeviceType.RECEIVER) receiver != null && listOf(BleUuids.RECEIVER_COMMAND, BleUuids.RECEIVER_RESPONSE, BleUuids.RECEIVER_STREAM, BleUuids.RECEIVER_STATUS).all { receiver.getCharacteristic(it) != null }
-        else sensorData?.getCharacteristic(BleUuids.SENSOR_DATA) != null && sensorConfig != null && listOf(BleUuids.SENSOR_OFFSET, BleUuids.SENSOR_RATE, BleUuids.SENSOR_MAC, BleUuids.SENSOR_INFO, BleUuids.SENSOR_POWER).all { sensorConfig.getCharacteristic(it) != null }
+        return when (expectedType) {
+            DeviceType.RECEIVER -> receiver != null && listOf(BleUuids.RECEIVER_COMMAND, BleUuids.RECEIVER_RESPONSE, BleUuids.RECEIVER_STREAM, BleUuids.RECEIVER_STATUS).all { receiver.getCharacteristic(it) != null }
+            DeviceType.OTA -> g.getService(BleUuids.OTA_SERVICE)?.let { it.getCharacteristic(BleUuids.OTA_CONTROL) != null && it.getCharacteristic(BleUuids.OTA_DATA) != null } == true
+            else -> sensorData?.getCharacteristic(BleUuids.SENSOR_DATA) != null && sensorConfig != null && listOf(BleUuids.SENSOR_OFFSET, BleUuids.SENSOR_RATE, BleUuids.SENSOR_MAC, BleUuids.SENSOR_INFO, BleUuids.SENSOR_POWER).all { sensorConfig.getCharacteristic(it) != null }
+        }
     }
 
     private fun beginSubscriptions(g: BluetoothGatt) {
@@ -210,7 +214,7 @@ class AndroidBleTransport @Inject constructor(
         if (expectedType == DeviceType.RECEIVER) {
             val s = g.getService(BleUuids.RECEIVER_SERVICE)
             listOf(BleUuids.RECEIVER_RESPONSE, BleUuids.RECEIVER_STATUS, BleUuids.RECEIVER_STREAM).mapNotNullTo(subscribeQueue) { s?.getCharacteristic(it) }
-        } else g.getService(BleUuids.SENSOR_DATA_SERVICE)?.getCharacteristic(BleUuids.SENSOR_DATA)?.let(subscribeQueue::add)
+        } else if (expectedType != DeviceType.OTA) g.getService(BleUuids.SENSOR_DATA_SERVICE)?.getCharacteristic(BleUuids.SENSOR_DATA)?.let(subscribeQueue::add)
         subscribeNext(g)
     }
 
@@ -228,4 +232,21 @@ class AndroidBleTransport @Inject constructor(
     private fun emit(c: BluetoothGattCharacteristic, value: ByteArray) { _packets.tryEmit(BlePacket(address, c.service.uuid, c.uuid, value.copyOf())) }
     private fun failConnect(message: String) { _state.value = BleConnectionState.ERROR; pendingConnect?.complete(Result.failure(IllegalStateException(message))) }
     private fun close(g: BluetoothGatt) { runCatching { g.close() }; if (gatt === g) gatt = null }
+
+    private fun parseAdvertisedAddresses(bytes: ByteArray?): Set<String> {
+        if (bytes == null) return emptySet()
+        val result = linkedSetOf<String>()
+        var offset = 0
+        while (offset < bytes.size) {
+            val length = bytes[offset].toInt() and 0xff
+            if (length == 0 || offset + length >= bytes.size) break
+            if ((bytes[offset + 1].toInt() and 0xff) == 0x1b && length >= 8) {
+                val address = bytes.copyOfRange(offset + 2, offset + 8)
+                result += address.joinToString("") { "%02X".format(it) }
+                result += address.reversedArray().joinToString("") { "%02X".format(it) }
+            }
+            offset += length + 1
+        }
+        return result
+    }
 }

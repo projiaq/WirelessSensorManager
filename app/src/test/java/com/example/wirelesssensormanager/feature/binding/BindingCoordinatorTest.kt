@@ -47,9 +47,18 @@ class BindingCoordinatorTest {
         val repo = StubRepository().apply { writeDelayMs = 100 }
         assertFailsWith<TimeoutCancellationException> { withTimeout(10) { BindingCoordinator(repo).bind(0, identity) } }
     }
+
+    @Test fun `table synchronization writes only changed slots and verifies`() = runTest {
+        val repo = StubRepository().apply { slots[0] = BindingSlot(0, 1, 1, byteArrayOf(9,8,7,6,5,4)) }
+        val desired = List<SensorIdentity?>(8) { if (it == 2) identity else null }
+        val actual = BindingCoordinator(repo).synchronize(desired)
+        assertFalse(actual[0].occupied)
+        assertArrayEquals(identity.mac, actual[2].mac)
+    }
 }
 
 class StubRepository : DeviceRepository {
+    override val packets = emptyFlow<BlePacket>()
     override val connectionState = MutableStateFlow(BleConnectionState.READY)
     override val devices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())
     override val logs = flowOf<List<DiagnosticLogEntity>>(emptyList())
@@ -70,7 +79,10 @@ class StubRepository : DeviceRepository {
         return response(ReceiverProtocol.SET_SLOT, slot)
     }
     override suspend fun clearBinding(slot: Int): ReceiverResponse { slots[slot] = BindingSlot(slot); return response(ReceiverProtocol.CLEAR_SLOT, slot) }
+    override suspend fun clearAllBindings(): ReceiverResponse { repeat(8) { slots[it] = BindingSlot(it) }; return response(ReceiverProtocol.CLEAR_ALL, 0xff) }
     override suspend fun setReceiverId(id: Int) = response(ReceiverProtocol.SET_ID, 0xff)
+    override suspend fun setReceiverSlotRate(slot: Int, rate: Int) = response(ReceiverProtocol.SET_RATE, slot)
+    override suspend fun readReceiverSensorInfo(slot: Int) = SensorInfo(0,0,0,true,0,0,2,2,1,0)
     override suspend fun readSensorInfo() = SensorInfo(0,0,0,true,0,0,2,2,1,0)
     override suspend fun readSensorOffset() = 0
     override suspend fun writeSensorOffset(value: Int) = Unit
@@ -78,5 +90,8 @@ class StubRepository : DeviceRepository {
     override suspend fun writeSensorRate(value: Int) = Unit
     override suspend fun readPowerMode() = 0
     override suspend fun writePowerMode(value: Int) = Unit
+    override suspend fun writeSensorMac(mac: ByteArray) = Unit
+    override suspend fun enterSensorEm4() = Unit
+    override suspend fun recordOperation(action: String, detail: String, success: Boolean) = Unit
     private fun response(opcode: Int, slot: Int) = ReceiverResponse(1, opcode, 0, slot, 1, 0, 0, ByteArray(6), false)
 }

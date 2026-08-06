@@ -27,6 +27,8 @@ interface DeviceRepository {
     suspend fun clearBinding(slot: Int): ReceiverResponse
     suspend fun clearAllBindings(): ReceiverResponse
     suspend fun setReceiverId(id: Int): ReceiverResponse
+    suspend fun setReceiverSlotRate(slot: Int, rate: Int): ReceiverResponse
+    suspend fun readReceiverSensorInfo(slot: Int): SensorInfo
     suspend fun readSensorInfo(): SensorInfo
     suspend fun readSensorOffset(): Int
     suspend fun writeSensorOffset(value: Int)
@@ -35,6 +37,8 @@ interface DeviceRepository {
     suspend fun readPowerMode(): Int
     suspend fun writePowerMode(value: Int)
     suspend fun writeSensorMac(mac: ByteArray)
+    suspend fun enterSensorEm4()
+    suspend fun recordOperation(action: String, detail: String, success: Boolean)
 }
 
 @Singleton
@@ -103,6 +107,12 @@ class DefaultDeviceRepository @Inject constructor(
     override suspend fun setReceiverId(id: Int) = receiverCommand(ReceiverProtocol.setId(id), ReceiverProtocol.SET_ID, 0xff).also {
         operation("设置接收器编号", id.toString(), it.status == 0)
     }
+    override suspend fun setReceiverSlotRate(slot: Int, rate: Int) = receiverCommand(ReceiverProtocol.setRate(slot, rate), ReceiverProtocol.SET_RATE, slot).also { operation("设置槽位速率", "槽位 ${slot + 1} / $rate", it.status == 0) }
+    override suspend fun readReceiverSensorInfo(slot: Int): SensorInfo {
+        val response = receiverCommand(ReceiverProtocol.getSensorInfo(slot), ReceiverProtocol.GET_SENSOR_INFO, slot)
+        check(response.status == 0) { ReceiverProtocol.statusMessage(response.status) }
+        return requireNotNull(response.sensorInfo) { "设备未返回槽位 ${slot + 1} 的传感器信息" }
+    }
 
     override suspend fun readSensorInfo() = logged("读取传感器信息", "SN_INFO") {
         SensorProtocol.parseInfo(transport.read(BleUuids.SENSOR_CONFIG_SERVICE, BleUuids.SENSOR_INFO))
@@ -113,7 +123,16 @@ class DefaultDeviceRepository @Inject constructor(
     override suspend fun writeSensorRate(value: Int) = writeAndVerify("速率", BleUuids.SENSOR_RATE, SensorProtocol.encodeRate(value))
     override suspend fun readPowerMode() = logged("读取功耗模式", "SN_POWER") { transport.read(BleUuids.SENSOR_CONFIG_SERVICE, BleUuids.SENSOR_POWER).single().toInt() and 0xff }
     override suspend fun writePowerMode(value: Int) = writeAndVerify("功耗模式", BleUuids.SENSOR_POWER, SensorProtocol.encodePower(value))
-    override suspend fun writeSensorMac(mac: ByteArray) = writeAndVerify("传感器 MAC", BleUuids.SENSOR_MAC, mac)
+    override suspend fun writeSensorMac(mac: ByteArray) {
+        require(mac.size == 6)
+        logged("设置传感器 MAC", "SN_MAC", mac) { transport.write(BleUuids.SENSOR_CONFIG_SERVICE, BleUuids.SENSOR_MAC, mac, true) }
+        operation("设置传感器 MAC", mac.toHex(), true)
+    }
+    override suspend fun enterSensorEm4() {
+        logged("进入 EM4", "SN_EM4", byteArrayOf(2)) { transport.write(BleUuids.SENSOR_CONFIG_SERVICE, BleUuids.SENSOR_RATE, byteArrayOf(2), true) }
+        operation("进入 EM4", "设备预期断开", true)
+    }
+    override suspend fun recordOperation(action: String, detail: String, success: Boolean) = operation(action, detail, success)
 
     private suspend fun receiverCommand(bytes: ByteArray, opcode: Int, slot: Int): ReceiverResponse = coroutineScope {
         logged("接收器命令 $opcode", "RX_CMD", bytes) {
