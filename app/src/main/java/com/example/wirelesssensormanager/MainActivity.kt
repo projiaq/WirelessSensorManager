@@ -152,10 +152,18 @@ private enum class Route(val path: String, val title: String) {
     InfoRow("固件 / 硬件", "${state.deviceVersion?.firmware ?: "--"} / ${state.deviceVersion?.hardware ?: "--"}")
     InfoRow("已绑定 / 在线", "${state.slots.count { it.occupied }} / ${state.slots.count { it.online }}")
     Button(onClick = vm::refreshReceiverAction) { Icon(Icons.Default.Refresh, null); Spacer(Modifier.width(6.dp)); Text("刷新设备状态") }
+    Text("实时数据", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    state.slots.forEach { slot ->
+        val sample = state.samples[slot.index]
+        if (sample != null) ListItem(headlineContent = { Text("槽位 ${slot.index + 1} · ${if (slot.sensorType == 2) "倾角" else "压力"}") }, supportingContent = { Text(if (slot.sensorType == 2) "X ${(sample.xAngle / 10f)}°  Y ${(sample.yAngle / 10f)}°" else "压力 ${sample.pressure} · 原始值 ${sample.raw}") }, trailingContent = { Text("${sample.temperature}°C") })
+    }
     ActionTile(Icons.Default.Tune, "接收器参数", "设置真实 Receiver ID") { nav.navigate(Route.GATEWAY_CONFIG.path) }
     ActionTile(Icons.Default.GridView, "1～8 号绑定槽位", "设备绑定表为最终依据") { nav.navigate(Route.SLOTS.path) }
     ActionTile(Icons.Default.Link, "绑定向导", "写入后自动回读核验") { nav.navigate(Route.BIND.path) }
     ActionTile(Icons.Default.LinkOff, "解绑传感器", "二次确认并回读核验") { nav.navigate(Route.UNBIND.path) }
+    var clearConfirm by remember { mutableStateOf(false) }
+    OutlinedButton(onClick = { clearConfirm = true }, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Icon(Icons.Default.DeleteSweep, null); Spacer(Modifier.width(6.dp)); Text("清空全部绑定") }
+    if (clearConfirm) AlertDialog(onDismissRequest = { clearConfirm = false }, title = { Text("确认清空全部绑定？") }, text = { Text("8 个槽位将全部清除，完成后以设备回读结果为准。") }, confirmButton = { TextButton(onClick = { clearConfirm = false; vm.clearAllBindings() }) { Text("确认") } }, dismissButton = { TextButton(onClick = { clearConfirm = false }) { Text("取消") } })
 }
 
 @Composable private fun GatewayConfigScreen(state: MainUiState, vm: MainViewModel) = Page {
@@ -187,10 +195,17 @@ private enum class Route(val path: String, val title: String) {
     InfoRow("累计运行", info?.workSeconds?.let { "$it 秒" } ?: "--")
     InfoRow("传感器状态", if (info?.online == true) "在线" else "未确认")
     Button(onClick = vm::refreshSensorAction) { Icon(Icons.Default.Refresh, null); Spacer(Modifier.width(6.dp)); Text("重新读取") }
+    state.samples[-1]?.let { sample ->
+        Text("实时采样", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        InfoRow("压力", sample.pressure.toString()); InfoRow("倾角", "X ${(sample.xAngle / 10f)}°  Y ${(sample.yAngle / 10f)}°"); InfoRow("电压", "${sample.voltageVolts ?: 0f} V")
+    }
     ActionTile(Icons.Default.Tune, "传感器参数", "写入后等待确认并回读") { nav.navigate(Route.SENSOR_CONFIG.path) }
 }
 
 @Composable private fun SensorConfigScreen(state: MainUiState, vm: MainViewModel) = Page {
+    var mac by remember { mutableStateOf("") }
+    OutlinedTextField(mac, { mac = it.uppercase().take(17) }, label = { Text("传感器 MAC") }, modifier = Modifier.fillMaxWidth())
+    OutlinedButton(onClick = { vm.writeSensorMac(mac) }, enabled = mac.count { it == ':' } == 5) { Icon(Icons.Default.Save, null); Spacer(Modifier.width(6.dp)); Text("写入 MAC 并回读") }
     var offset by remember(state.sensorOffset) { mutableStateOf(state.sensorOffset?.toString().orEmpty()) }
     OutlinedTextField(offset, { offset = it.filter { c -> c.isDigit() || c == '-' } }, label = { Text("偏移（固件 int32 原始单位）") }, modifier = Modifier.fillMaxWidth())
     Button(onClick = { offset.toIntOrNull()?.let(vm::writeOffset) }) { Icon(Icons.Default.Save, null); Spacer(Modifier.width(6.dp)); Text("写入偏移并回读") }

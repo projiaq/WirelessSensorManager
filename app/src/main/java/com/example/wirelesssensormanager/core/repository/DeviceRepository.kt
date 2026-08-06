@@ -11,6 +11,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 interface DeviceRepository {
+    val packets: Flow<BlePacket>
     val connectionState: StateFlow<BleConnectionState>
     val devices: StateFlow<List<DiscoveredDevice>>
     val logs: Flow<List<DiagnosticLogEntity>>
@@ -24,6 +25,7 @@ interface DeviceRepository {
     suspend fun readBindingTable(): List<BindingSlot>
     suspend fun setBinding(slot: Int, identity: SensorIdentity): ReceiverResponse
     suspend fun clearBinding(slot: Int): ReceiverResponse
+    suspend fun clearAllBindings(): ReceiverResponse
     suspend fun setReceiverId(id: Int): ReceiverResponse
     suspend fun readSensorInfo(): SensorInfo
     suspend fun readSensorOffset(): Int
@@ -32,6 +34,7 @@ interface DeviceRepository {
     suspend fun writeSensorRate(value: Int)
     suspend fun readPowerMode(): Int
     suspend fun writePowerMode(value: Int)
+    suspend fun writeSensorMac(mac: ByteArray)
 }
 
 @Singleton
@@ -40,6 +43,7 @@ class DefaultDeviceRepository @Inject constructor(
     private val dao: AppDao,
     settings: SettingsStore
 ) : DeviceRepository {
+    override val packets: Flow<BlePacket> = transport.packets
     override val connectionState = transport.connectionState
     override val devices = transport.discoveredDevices
     override val logs = dao.logs()
@@ -95,6 +99,7 @@ class DefaultDeviceRepository @Inject constructor(
     override suspend fun clearBinding(slot: Int) = receiverCommand(ReceiverProtocol.clearSlot(slot), ReceiverProtocol.CLEAR_SLOT, slot).also {
         operation("解绑", "槽位 ${slot + 1}", it.status == 0)
     }
+    override suspend fun clearAllBindings() = receiverCommand(ReceiverProtocol.clearAll(), ReceiverProtocol.CLEAR_ALL, 0xff).also { operation("清空全部绑定", "8 个槽位", it.status == 0) }
     override suspend fun setReceiverId(id: Int) = receiverCommand(ReceiverProtocol.setId(id), ReceiverProtocol.SET_ID, 0xff).also {
         operation("设置接收器编号", id.toString(), it.status == 0)
     }
@@ -108,6 +113,7 @@ class DefaultDeviceRepository @Inject constructor(
     override suspend fun writeSensorRate(value: Int) = writeAndVerify("速率", BleUuids.SENSOR_RATE, SensorProtocol.encodeRate(value))
     override suspend fun readPowerMode() = logged("读取功耗模式", "SN_POWER") { transport.read(BleUuids.SENSOR_CONFIG_SERVICE, BleUuids.SENSOR_POWER).single().toInt() and 0xff }
     override suspend fun writePowerMode(value: Int) = writeAndVerify("功耗模式", BleUuids.SENSOR_POWER, SensorProtocol.encodePower(value))
+    override suspend fun writeSensorMac(mac: ByteArray) = writeAndVerify("传感器 MAC", BleUuids.SENSOR_MAC, mac)
 
     private suspend fun receiverCommand(bytes: ByteArray, opcode: Int, slot: Int): ReceiverResponse = coroutineScope {
         logged("接收器命令 $opcode", "RX_CMD", bytes) {

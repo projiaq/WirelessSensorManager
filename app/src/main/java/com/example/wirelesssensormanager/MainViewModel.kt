@@ -28,6 +28,8 @@ data class MainUiState(
     val sensorOffset: Int? = null,
     val sensorRate: Int? = null,
     val powerMode: Int? = null,
+    val samples: Map<Int, SensorSample> = emptyMap(),
+    val lastSampleAt: Long = 0L,
     val stagedSensor: SensorIdentity? = null,
     val logs: List<DiagnosticLogEntity> = emptyList(),
     val operations: List<OperationEntity> = emptyList(),
@@ -48,6 +50,20 @@ class MainViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
     private val _ota = MutableStateFlow<OtaProgress?>(null)
     val ota: StateFlow<OtaProgress?> = _ota.asStateFlow()
+    init {
+        viewModelScope.launch {
+            repository.packets.collect { packet ->
+                runCatching {
+                    val sample = when (packet.characteristic) {
+                        com.example.wirelesssensormanager.core.protocol.BleUuids.RECEIVER_STREAM -> com.example.wirelesssensormanager.core.protocol.SensorProtocol.parseSample(packet.value, 1, packet.value.first().toInt() and 0xff)
+                        com.example.wirelesssensormanager.core.protocol.BleUuids.SENSOR_DATA -> com.example.wirelesssensormanager.core.protocol.SensorProtocol.parseSample(packet.value)
+                        else -> null
+                    }
+                    if (sample != null) local.update { it.copy(samples = it.samples + ((sample.slot ?: -1) to sample), lastSampleAt = sample.receivedAt) }
+                }
+            }
+        }
+    }
     fun startOta(context: Context, uri: Uri) = execute { otaService.update(context.contentResolver, uri) { _ota.value = it }; message("OTA ${_ota.value?.state ?: "完成"}") }
 
     fun scan() = execute { repository.scan() }
@@ -88,6 +104,8 @@ class MainViewModel @Inject constructor(
             is BindingResult.Rejected -> error(result.reason)
         }
     }
+    fun clearAllBindings() = execute { val response = repository.clearAllBindings(); check(response.status == 0); refreshReceiver(); message("已清空全部绑定并回读验证") }
+    fun writeSensorMac(value: String) = execute { val mac = value.split(':').mapNotNull { it.toIntOrNull(16)?.toByte() }.toByteArray(); require(mac.size == 6); repository.writeSensorMac(mac); refreshSensor(); message("MAC 已写入并回读验证") }
     fun clearMessage() = local.update { it.copy(message = null) }
     fun setDiagnostics(enabled: Boolean) = viewModelScope.launch { settings.setDiagnosticsEnabled(enabled) }
 

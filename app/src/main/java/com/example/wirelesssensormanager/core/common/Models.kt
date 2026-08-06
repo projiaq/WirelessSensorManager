@@ -65,6 +65,14 @@ data class SensorInfo(
 
 data class DeviceVersionInfo(val model: String?, val hardware: String?, val firmware: String?)
 
+data class SensorSample(
+    val slot: Int? = null, val uptimeSeconds: Long, val temperature: Int,
+    val pressure: Int, val raw: Long, val xAngle: Int, val yAngle: Int,
+    val xRaw: Int, val yRaw: Int, val zRaw: Int, val sequence: Int,
+    val voltageVolts: Float? = null, val readOk: Boolean? = null,
+    val receivedAt: Long = System.currentTimeMillis()
+)
+
 sealed interface AppResult<out T> {
     data class Success<T>(val value: T) : AppResult<T>
     data class Failure(val message: String, val cause: Throwable? = null) : AppResult<Nothing>
