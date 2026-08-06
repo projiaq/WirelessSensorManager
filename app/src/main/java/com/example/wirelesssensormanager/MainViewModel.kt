@@ -13,6 +13,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
+import android.net.Uri
+import com.example.wirelesssensormanager.core.ota.*
 import javax.inject.Inject
 
 data class MainUiState(
@@ -38,11 +40,15 @@ class MainViewModel @Inject constructor(
     private val repository: DeviceRepository,
     private val bindingCoordinator: BindingCoordinator,
     private val settings: SettingsStore
+    , private val otaService: OtaService
 ) : ViewModel() {
     private val local = MutableStateFlow(MainUiState())
     val state: StateFlow<MainUiState> = combine(local, repository.connectionState, repository.devices, repository.logs, repository.operations) { s, connection, devices, logs, operations ->
         s.copy(connection = connection, devices = devices, logs = logs, operations = operations)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
+    private val _ota = MutableStateFlow<OtaProgress?>(null)
+    val ota: StateFlow<OtaProgress?> = _ota.asStateFlow()
+    fun startOta(context: Context, uri: Uri) = execute { otaService.update(context.contentResolver, uri) { _ota.value = it }; message("OTA ${_ota.value?.state ?: "完成"}") }
 
     fun scan() = execute { repository.scan() }
     fun stopScan() = repository.stopScan()

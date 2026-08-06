@@ -6,6 +6,9 @@ import java.nio.ByteOrder
 import java.util.UUID
 
 object BleUuids {
+    val OTA_SERVICE: UUID = UUID.fromString("1d14d6ee-fd63-4fa1-bfa4-8f47b42119f0")
+    val OTA_CONTROL: UUID = UUID.fromString("f7bf3564-fb6d-4e53-88a4-5e37e0326063")
+    val OTA_DATA: UUID = UUID.fromString("984227f3-34fc-4045-a5d0-2c581f81a153")
     val DEVICE_INFO_SERVICE: UUID = UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb")
     val MODEL_NUMBER: UUID = UUID.fromString("00002a24-0000-1000-8000-00805f9b34fb")
     val FIRMWARE_REVISION: UUID = UUID.fromString("00002a26-0000-1000-8000-00805f9b34fb")
@@ -24,6 +27,12 @@ object BleUuids {
     val SENSOR_INFO: UUID = UUID.fromString("d6e1f208-3a1b-4c72-b9a5-5e1f6c308d2a")
     val SENSOR_POWER: UUID = UUID.fromString("d6e1f209-3a1b-4c72-b9a5-5e1f6c308d2a")
     val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+}
+
+object OtaProtocol {
+    const val BEGIN = 0xEE
+    const val FINISH = 0x00
+    const val CHUNK_SIZE = 128
 }
 
 object ReceiverProtocol {

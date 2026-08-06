@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.example.wirelesssensormanager.core.ble.*
 import com.example.wirelesssensormanager.core.database.*
 import com.example.wirelesssensormanager.core.repository.*
+import com.example.wirelesssensormanager.core.ota.OtaService
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -24,4 +25,5 @@ object DatabaseModule {
     @Provides @Singleton fun database(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "wireless-sensors.db").build()
     @Provides fun dao(database: AppDatabase): AppDao = database.dao()
+    @Provides @Singleton fun otaService(transport: BleTransport) = OtaService(transport)
 }

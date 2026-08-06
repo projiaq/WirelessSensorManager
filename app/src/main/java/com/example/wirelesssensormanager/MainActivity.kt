@@ -44,7 +44,7 @@ private enum class Route(val path: String, val title: String) {
     GATEWAY("gateway", "接收器详情"), GATEWAY_CONFIG("gateway_config", "接收器参数"),
     SLOTS("slots", "绑定槽位"), SENSOR("sensor", "传感器详情"), SENSOR_CONFIG("sensor_config", "传感器参数"),
     BIND("bind", "绑定向导"), UNBIND("unbind", "解绑确认"), DIAGNOSTICS("diagnostics", "通信诊断"),
-    HISTORY("history", "历史记录"), SETTINGS("settings", "设置与关于")
+    HISTORY("history", "历史记录"), OTA("ota", "固件升级"), SETTINGS("settings", "设置与关于")
 }
 
 @Composable private fun App(vm: MainViewModel = hiltViewModel()) {
@@ -69,6 +69,7 @@ private enum class Route(val path: String, val title: String) {
                 composable(Route.UNBIND.path) { UnbindScreen(state, vm) }
                 composable(Route.DIAGNOSTICS.path) { DiagnosticsScreen(state, vm) }
                 composable(Route.HISTORY.path) { HistoryScreen(state) }
+                composable(Route.OTA.path) { OtaScreen(state, vm) }
                 composable(Route.SETTINGS.path) { SettingsScreen(vm) }
             }
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
@@ -118,6 +119,18 @@ private enum class Route(val path: String, val title: String) {
     ActionTile(Icons.Default.Router, "接收器与 8 槽绑定", "查看设备真实绑定表") { nav.navigate(Route.GATEWAY.path) }
     ActionTile(Icons.Default.Sensors, "传感器配置", "偏移、速率和功耗模式") { nav.navigate(Route.SENSOR.path) }
     ActionTile(Icons.Default.History, "操作记录", "绑定、解绑与参数修改") { nav.navigate(Route.HISTORY.path) }
+    ActionTile(Icons.Default.SystemUpdate, "固件升级 OTA", "选择本地 .gbl 文件并按 DFU 流程传输") { nav.navigate(Route.OTA.path) }
+}
+
+@Composable private fun OtaScreen(state: MainUiState, vm: MainViewModel) = Page {
+    val context = LocalContext.current
+    var launcher by remember { mutableStateOf<androidx.activity.result.ActivityResultLauncher<String>?>(null) }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { vm.startOta(context, it) } }
+    Text("Silicon Labs GBL 固件升级", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+    Text("升级期间请保持设备近距离，数据块写入失败不会自动重发。设备进入 DFU 后需重新扫描并连接。", color = MaterialTheme.colorScheme.outline)
+    Button(onClick = { pick.launch("application/octet-stream") }, enabled = state.connection == BleConnectionState.READY) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("选择 .gbl 固件") }
+    val progress by vm.ota.collectAsStateWithLifecycle()
+    progress?.let { p -> LinearProgressIndicator({ p.fraction }, Modifier.fillMaxWidth()); Text("${p.state}  ${(p.fraction * 100).toInt()}%") }
 }
 
 @Composable private fun ScanScreen(nav: NavHostController, state: MainUiState, vm: MainViewModel) = Page {
